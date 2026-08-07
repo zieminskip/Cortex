@@ -1,0 +1,17 @@
+{
+  "name": "cortex",
+  "version": "1.0.0",
+  "description": "Interactive Total Business performance dashboard",
+  "main": "index.html",
+  "scripts": {
+    "test": "node test-dashboard.js",
+    "capture": "node capture.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "playwright-core": "^1.62.1"
+  }
+}
