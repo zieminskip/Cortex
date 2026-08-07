@@ -5,7 +5,9 @@
   "main": "index.html",
   "scripts": {
     "test": "node test-dashboard.js",
-    "capture": "node capture.js"
+    "capture": "node capture.js",
+    "warehouse:build": "node warehouse/build-warehouse.js",
+    "warehouse:validate": "node warehouse/validate-warehouse.js"
   },
   "keywords": [],
   "author": "",
@@ -13,5 +15,8 @@
   "type": "commonjs",
   "devDependencies": {
     "playwright-core": "^1.62.1"
+  },
+  "dependencies": {
+    "@duckdb/node-api": "^1.5.5-r.3"
   }
 }
