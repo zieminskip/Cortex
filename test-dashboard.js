@@ -13,7 +13,7 @@ const assert = require('node:assert/strict');
   assert.equal(errors.length, 0, errors.join('\n'));
   assert.equal(await page.locator('.metric').nth(3).locator('.big').innerText(), '32%');
   assert.equal(await page.locator('.callout strong').innerText(), '–26%');
-  assert.match(await page.locator('.customer tbody tr').nth(1).innerText(), /10%/);
+  assert.match(await page.locator('.customer tbody tr').nth(1).innerText(), /9%/);
 
   const geometry = await page.evaluate(() => {
     const rect = selector => { const r = document.querySelector(selector).getBoundingClientRect(); return { top:r.top, bottom:r.bottom, height:r.height }; };
@@ -47,8 +47,42 @@ const assert = require('node:assert/strict');
 
   await page.locator('#gapChart rect[data-week="W29"]').click();
   assert.ok(await page.locator('#gapChart rect[data-week="W29"]').evaluate(el => el.classList.contains('selected')));
-  await page.locator('.heatgrid .cell[data-value="-3.0"]').first().click();
-  assert.ok(await page.locator('.heatgrid .cell[data-value="-3.0"]').first().evaluate(el => el.classList.contains('selected')));
+  await page.locator('.heatgrid .cell[data-value="-3"]').first().click();
+  assert.ok(await page.locator('.heatgrid .cell[data-value="-3"]').first().evaluate(el => el.classList.contains('selected')));
+
+  const attributionExpectations = { Customer:'Walmart', Brand:'Febreze', Category:'Home Care', Geography:'South' };
+  for (const [dimension,firstMember] of Object.entries(attributionExpectations)) {
+    await page.locator('.choice', { hasText:dimension }).click();
+    assert.equal(await page.locator('#contributionTitle').innerText(), `${dimension} Contribution`);
+    assert.match(await page.locator('#contributionBody tr').first().innerText(), new RegExp(firstMember));
+    assert.equal(await page.locator('#heatgrid .rlabel').first().innerText(), firstMember);
+    assert.equal(await page.locator('#selectedDimension').innerText(), dimension);
+    assert.equal(await page.locator('.customername').innerText(), firstMember);
+    const shareTotal=await page.locator('#contributionBody tr').evaluateAll(rows=>rows.reduce((sum,row)=>{const text=row.children[2].textContent.trim();return sum+(text.includes('%')?Number.parseInt(text):0)},0));
+    assert.equal(shareTotal,100,`${dimension} negative-drag shares must total 100%`);
+  }
+  await page.locator('.choice', { hasText:'Brand' }).click();
+  await page.locator('#contributionBody tr[data-name="Swiffer"]').click();
+  assert.equal(await page.locator('.customername').innerText(), 'Swiffer');
+  assert.ok(await page.locator('.chips .chip',{hasText:'Brand',exact:true}).isDisabled());
+  const signatures=[];
+  for (const split of ['Category','Geography','Segment']) {
+    await page.locator('.chips .chip', { hasText:split, exact:true }).click();
+    assert.equal(await page.locator('.card').count(), 5);
+    const coherent = await page.locator('.card').evaluateAll(cards => cards.every(card => {
+      const gaps=card.dataset.gaps.split(',').map(Number),impact=Number(card.dataset.impact),current=Number(card.dataset.current);
+      return Math.abs(gaps.reduce((a,b)=>a+b,0)-impact)<0.011 && gaps.length===8 && Math.abs(gaps.at(-1)-current)<0.001;
+    }));
+    assert.ok(coherent, `${split} small multiples must reconcile`);
+    const signature=await page.locator('.card').evaluateAll(cards=>cards.map(card=>`${card.querySelector('.brandrow').textContent.trim()}:${card.dataset.gaps}`).join('|'));
+    signatures.push(signature);
+    const domains=await page.locator('.card').evaluateAll(cards=>new Set(cards.map(card=>`${card.dataset.yMin}:${card.dataset.yMax}`)).size);
+    assert.equal(domains,1,`${split} small multiples must share one Y-axis`);
+  }
+  assert.equal(new Set(signatures).size,signatures.length,'Each split must render different members and weekly data');
+  await page.locator('.choice',{hasText:'Customer'}).click();
+  await page.locator('.chips .chip',{hasText:'Brand',exact:true}).click();
+  assert.equal(await page.locator('.card').first().locator('.brandrow').innerText(),'Tide');
   await page.locator('.edit').click();
   assert.ok(await page.locator('#timeModal').evaluate(el => el.classList.contains('show')));
   await page.keyboard.press('Escape');

@@ -6,6 +6,7 @@
   "scripts": {
     "test": "node test-dashboard.js",
     "capture": "node capture.js",
+    "capture:slicers": "node capture-slicers.js",
     "warehouse:build": "node warehouse/build-warehouse.js",
     "warehouse:validate": "node warehouse/validate-warehouse.js"
   },

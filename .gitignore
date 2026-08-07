@@ -2,5 +2,6 @@ node_modules/
 *.log
 dashboard-*.png
 chart-*.png
+small-multiples-*.png
 .DS_Store
 Thumbs.db
