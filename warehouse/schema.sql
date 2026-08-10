@@ -169,13 +169,33 @@ GROUP BY ALL
 ORDER BY c.customer_name, w.fiscal_week;
 
 CREATE OR REPLACE VIEW mart.v_walmart_brand_decomposition AS
-SELECT * FROM (VALUES
-  ('Tide', -12.6, -1.3, 35),
-  ('Gain', -8.4, -0.9, 28),
-  ('Great Value', -3.1, -0.4, 31),
-  ('Equate', -1.9, -0.1, 50),
-  ('Other Brands', -1.2, 0.2, 65)
-) AS t(brand_name, cumulative_impact_m, current_gap_m, gap_closed_pct)
+WITH weekly AS (
+  SELECT
+    b.brand_name,
+    w.fiscal_week,
+    SUM(f.actual_sales_usd - f.expected_sales_usd) / 1000000 AS weekly_gap_m
+  FROM core.fact_weekly_sales f
+  JOIN core.dim_week w USING (week_key)
+  JOIN core.dim_customer c USING (customer_key)
+  JOIN core.dim_product p USING (product_key)
+  JOIN core.dim_brand b USING (brand_key)
+  WHERE c.customer_name = 'Walmart' AND w.fiscal_week BETWEEN 22 AND 29
+  GROUP BY ALL
+), summary AS (
+  SELECT
+    brand_name,
+    ROUND(SUM(weekly_gap_m), 1) AS cumulative_impact_m,
+    ROUND(MAX(weekly_gap_m) FILTER (WHERE fiscal_week = 29), 1) AS current_gap_m,
+    MAX(ABS(weekly_gap_m)) AS peak_gap_m
+  FROM weekly
+  GROUP BY brand_name
+)
+SELECT
+  brand_name,
+  cumulative_impact_m,
+  current_gap_m,
+  CASE WHEN peak_gap_m = 0 THEN 100 ELSE ROUND((1 - ABS(current_gap_m) / peak_gap_m) * 100) END AS gap_closed_pct
+FROM summary
 ORDER BY cumulative_impact_m;
 
 CREATE OR REPLACE VIEW mart.v_dimension_concentration AS

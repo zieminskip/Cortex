@@ -47,10 +47,10 @@ const assert = require('node:assert/strict');
 
   await page.locator('#gapChart rect[data-week="W29"]').click();
   assert.ok(await page.locator('#gapChart rect[data-week="W29"]').evaluate(el => el.classList.contains('selected')));
-  await page.locator('.heatgrid .cell[data-value="-3"]').first().click();
-  assert.ok(await page.locator('.heatgrid .cell[data-value="-3"]').first().evaluate(el => el.classList.contains('selected')));
+  await page.locator('.heatgrid .cell').first().click();
+  assert.ok(await page.locator('.heatgrid .cell').first().evaluate(el => el.classList.contains('selected')));
 
-  const attributionExpectations = { Customer:'Walmart', Brand:'Febreze', Category:'Home Care', Geography:'South' };
+  const attributionExpectations = { Customer:'Walmart', Brand:'Febreze', Category:'Laundry', Geography:'South' };
   for (const [dimension,firstMember] of Object.entries(attributionExpectations)) {
     await page.locator('.choice', { hasText:dimension }).click();
     assert.equal(await page.locator('#contributionTitle').innerText(), `${dimension} Contribution`);
@@ -58,26 +58,31 @@ const assert = require('node:assert/strict');
     assert.equal(await page.locator('#heatgrid .rlabel').first().innerText(), firstMember);
     assert.equal(await page.locator('#selectedDimension').innerText(), dimension);
     assert.equal(await page.locator('.customername').innerText(), firstMember);
-    const shareTotal=await page.locator('#contributionBody tr').evaluateAll(rows=>rows.reduce((sum,row)=>{const text=row.children[2].textContent.trim();return sum+(text.includes('%')?Number.parseInt(text):0)},0));
-    assert.equal(shareTotal,100,`${dimension} negative-drag shares must total 100%`);
+    const sharesMatchWarehouse=await page.locator('#contributionBody tr').evaluateAll((rows,dimension)=>rows.every(row=>{const source=window.CORTEX_DATA.attribution[dimension].rows.find(item=>item.name===row.dataset.name),text=row.children[2].textContent.trim();return source.share==null?!text.includes('%'):Number.parseInt(text)===source.share}),dimension);
+    assert.ok(sharesMatchWarehouse,`${dimension} shares must use the complete warehouse negative-drag denominator`);
   }
   await page.locator('.choice', { hasText:'Brand' }).click();
   await page.locator('#contributionBody tr[data-name="Swiffer"]').click();
   assert.equal(await page.locator('.customername').innerText(), 'Swiffer');
   assert.ok(await page.locator('.chips .chip',{hasText:'Brand',exact:true}).isDisabled());
   const signatures=[];
+  const expectedCardCounts={Category:5,Geography:4,Segment:3};
   for (const split of ['Category','Geography','Segment']) {
     await page.locator('.chips .chip', { hasText:split, exact:true }).click();
-    assert.equal(await page.locator('.card').count(), 5);
+    assert.equal(await page.locator('.card').count(), expectedCardCounts[split]);
     const coherent = await page.locator('.card').evaluateAll(cards => cards.every(card => {
-      const gaps=card.dataset.gaps.split(',').map(Number),impact=Number(card.dataset.impact),current=Number(card.dataset.current);
-      return Math.abs(gaps.reduce((a,b)=>a+b,0)-impact)<0.011 && gaps.length===8 && Math.abs(gaps.at(-1)-current)<0.001;
+      const gaps=card.dataset.gaps.split(',').map(Number),actual=card.dataset.actual.split(',').map(Number),expected=card.dataset.expected.split(',').map(Number),impact=Number(card.dataset.impact),current=Number(card.dataset.current);
+      return Math.abs(gaps.reduce((a,b)=>a+b,0)-impact)<0.011 && gaps.length===8 && Math.abs(gaps.at(-1)-current)<0.001 && gaps.every((gap,index)=>Math.abs((actual[index]-expected[index])-gap)<0.011);
     }));
-    assert.ok(coherent, `${split} small multiples must reconcile`);
+    assert.ok(coherent, `${split} cards must reconcile Actual, Expected, weekly gap, current gap, and cumulative impact`);
     const signature=await page.locator('.card').evaluateAll(cards=>cards.map(card=>`${card.querySelector('.brandrow').textContent.trim()}:${card.dataset.gaps}`).join('|'));
     signatures.push(signature);
-    const domains=await page.locator('.card').evaluateAll(cards=>new Set(cards.map(card=>`${card.dataset.yMin}:${card.dataset.yMax}`)).size);
-    assert.equal(domains,1,`${split} small multiples must share one Y-axis`);
+    const axesAutoNarrow=await page.locator('.card').evaluateAll(cards=>cards.every(card=>{const values=[...card.dataset.actual.split(','),...card.dataset.expected.split(',')].map(Number),min=Number(card.dataset.yMin),max=Number(card.dataset.yMax),rawMin=Math.min(...values),rawMax=Math.max(...values);return min<=rawMin&&max>=rawMax&&min>0&&(max-min)<Math.max(1,(rawMax-rawMin)*2.5)}));
+    assert.ok(axesAutoNarrow,`${split} card axes must auto-narrow around their own visible values without forcing zero`);
+    const uniqueDomains=await page.locator('.card').evaluateAll(cards=>new Set(cards.map(card=>`${card.dataset.yMin}:${card.dataset.yMax}`)).size);
+    assert.ok(uniqueDomains>1,`${split} cards must calculate local Y-axis domains independently`);
+    const normalizedShapes=await page.locator('.card').evaluateAll(cards=>new Set(cards.map(card=>{const gaps=card.dataset.gaps.split(',').map(Number),scale=Math.max(...gaps.map(Math.abs),.01);return gaps.map(value=>(value/scale).toFixed(2)).join(',')})).size);
+    assert.ok(normalizedShapes>1,`${split} cards must contain distinct dimensional trend shapes, not proportional templates`);
   }
   assert.equal(new Set(signatures).size,signatures.length,'Each split must render different members and weekly data');
   await page.locator('.choice',{hasText:'Customer'}).click();

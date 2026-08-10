@@ -31,11 +31,27 @@ const brands = [
   ['Gain','P&G','assets/logos/gain.png','Laundry','Liquid Detergent','88 fl oz'],
   ['Great Value','Walmart','assets/logos/great-value.svg','Laundry','Private Label Detergent','100 fl oz'],
   ['Equate','Walmart','assets/logos/equate.svg','Personal Care','Private Label Care','32 fl oz'],
-  ['Other Brands','P&G','assets/logos/pg.png','Home Care','Portfolio','Assorted'],
+  ['Other Brands','P&G','assets/logos/pg.png','Other Portfolio','Portfolio','Assorted'],
   ['Ariel','P&G',null,'Laundry','Powder Detergent','70 oz'],['Downy','P&G',null,'Laundry','Fabric Enhancer','64 fl oz'],
   ['Bounty','P&G',null,'Paper','Paper Towels','6 rolls'],['Charmin','P&G',null,'Paper','Bath Tissue','12 rolls'],
-  ['Febreze','P&G',null,'Home Care','Air Care','8.8 oz'],['Dawn','P&G',null,'Home Care','Dish Care','24 fl oz'],
+  ['Febreze','P&G',null,'Home Care','Air Care','8.8 oz'],['Swiffer','P&G',null,'Home Care','Floor Care','WetJet starter kit'],
+  ['Dawn','P&G',null,'Home Care','Dish Care','24 fl oz'],['Mr. Clean','P&G',null,'Home Care','Surface Care','45 fl oz'],
+  ['Cascade','P&G',null,'Home Care','Automatic Dish','62 count'],['Microban','P&G',null,'Home Care','Sanitizing','24 fl oz'],
 ];
+const productLines = {
+  Febreze:[['Air Care',.34],['Fabric Refresher',.25],['Small Spaces',.18],['Car',.13],['Other Febreze',.10]],
+  Swiffer:[['Wet Floor',.31],['Dry Floor',.24],['Dusters',.19],['WetJet',.16],['Refills',.10]],
+  Dawn:[['Hand Dish',.36],['Powerwash',.25],['Dish Spray',.17],['Professional',.13],['Other Dawn',.09]],
+};
+const products = brands.flatMap((brand, brandIndex) => {
+  const [brandName,,,category,subcategory,packageSize] = brand;
+  const lines = productLines[brandName] || [[subcategory,1]];
+  return lines.map(([line,weight], lineIndex) => ({
+    brandIndex, brandName, category, subcategory:line, packageSize,
+    productName:`${brandName} ${line}${lineIndex ? ` ${lineIndex + 1}` : ''}`,
+    weight,
+  }));
+});
 const geographies = [['Northeast','New York Metro','United States',.22],['South','Atlanta Metro','United States',.34],['Midwest','Chicago Metro','United States',.25],['West','Los Angeles Metro','United States',.19]];
 const segments = [['Value Seekers','Price-sensitive households',.38],['Mainstream Families','High-frequency family households',.44],['Premium Shoppers','Feature and performance-led households',.18]];
 const customerPostGaps = {
@@ -49,7 +65,7 @@ const walmartBrandGaps = {
 };
 const customerBrandWeights = {
   Walmart:{Tide:.40,Gain:.27,'Great Value':.14,Equate:.09,'Other Brands':.10},
-  default:{Tide:.28,Gain:.19,Ariel:.07,Downy:.10,Bounty:.09,Charmin:.10,Febreze:.07,Dawn:.07,'Other Brands':.03},
+  default:{Tide:.22,Gain:.14,Ariel:.05,Downy:.08,Bounty:.07,Charmin:.08,Febreze:.09,Swiffer:.07,Dawn:.08,'Mr. Clean':.04,Cascade:.035,Microban:.015,'Other Brands':.03},
 };
 
 function allocationRows(totalExpectedCents, totalGapCents, customerIndex, weekIndex) {
@@ -60,10 +76,18 @@ function allocationRows(totalExpectedCents, totalGapCents, customerIndex, weekIn
   const combinations = [];
   for (const [brandName, brandWeight] of Object.entries(brandWeights)) {
     const brandIndex = brands.findIndex(b => b[0] === brandName);
-    for (let g = 0; g < geographies.length; g++) for (let s = 0; s < segments.length; s++) {
-      combinations.push({ brandIndex, brandName, weight: brandWeight * geographies[g][3] * segments[s][2], geographyIndex:g, segmentIndex:s });
+    for (const product of products.filter(p => p.brandIndex === brandIndex)) for (let g = 0; g < geographies.length; g++) for (let s = 0; s < segments.length; s++) {
+      combinations.push({ brandIndex, brandName, productIndex:products.indexOf(product), weight:brandWeight * product.weight * geographies[g][3] * segments[s][2], geographyIndex:g, segmentIndex:s });
     }
   }
+  combinations.forEach(combo => {
+    const productWave = Math.sin((weekIndex + 2) * (combo.productIndex + 1) * .37) * .09;
+    const geographyWave = Math.cos((weekIndex + 1) * (combo.geographyIndex + 1) * .43) * .08;
+    const segmentWave = Math.sin((weekIndex + 3) * (combo.segmentIndex + 2) * .29) * .07;
+    combo.dynamicWeight = combo.weight * Math.max(.65, 1 + productWave + geographyWave + segmentWave);
+  });
+  const dynamicTotal = combinations.reduce((sum, combo) => sum + combo.dynamicWeight, 0);
+  const brandDynamicTotals = Object.fromEntries(Object.keys(brandWeights).map(brandName => [brandName, combinations.filter(combo => combo.brandName === brandName).reduce((sum, combo) => sum + combo.dynamicWeight, 0)]));
   const customerExpected = Math.round(totalExpectedCents * customerWeight);
   let customerGap;
   if (weekIndex >= 8) {
@@ -79,11 +103,11 @@ function allocationRows(totalExpectedCents, totalGapCents, customerIndex, weekIn
   let expectedAssigned = 0, gapAssigned = 0;
   combinations.forEach((combo, index) => {
     const last = index === combinations.length - 1;
-    const expected = last ? customerExpected - expectedAssigned : Math.round(customerExpected * combo.weight);
+    const expected = last ? customerExpected - expectedAssigned : Math.round(customerExpected * combo.dynamicWeight / dynamicTotal);
     let gap;
     if (weekIndex >= 8 && customerName === 'Walmart') {
       const brandGap = Math.round(walmartBrandGaps[combo.brandName][weekIndex - 8] * 100000000);
-      const geoSegmentWeight = geographies[combo.geographyIndex][3] * segments[combo.segmentIndex][2];
+      const geoSegmentWeight = combo.dynamicWeight / brandDynamicTotals[combo.brandName];
       const sameBrand = combinations.filter(c => c.brandName === combo.brandName);
       const lastOfBrand = combo === sameBrand[sameBrand.length - 1];
       const priorBrandGap = rows.filter(r => r.brandName === combo.brandName).reduce((sum, r) => sum + r.gap, 0);
@@ -105,7 +129,7 @@ function allocationRows(totalExpectedCents, totalGapCents, customerIndex, weekIn
     await insertRows(conn, 'core.dim_week', ['week_key','fiscal_year','fiscal_week','week_start','week_end','week_label','is_current'], weeks.map(([week,start]) => { const end=new Date(`${start}T00:00:00Z`);end.setUTCDate(end.getUTCDate()+6);return [202400+week,2024,week,start,end.toISOString().slice(0,10),`W${week}`,week===29] }));
     await insertRows(conn, 'core.dim_customer', ['customer_key','customer_name','channel','tier','logo_path'], customers.map((c,i)=>[i+1,...c.slice(0,4)]));
     await insertRows(conn, 'core.dim_brand', ['brand_key','brand_name','manufacturer','logo_path'], brands.map((b,i)=>[i+1,b[0],b[1],b[2]]));
-    await insertRows(conn, 'core.dim_product', ['product_key','product_name','brand_key','category','subcategory','package_size'], brands.map((b,i)=>[i+1,`${b[0]} ${b[4]}`,i+1,b[3],b[4],b[5]]));
+    await insertRows(conn, 'core.dim_product', ['product_key','product_name','brand_key','category','subcategory','package_size'], products.map((p,i)=>[i+1,p.productName,p.brandIndex+1,p.category,p.subcategory,p.packageSize]));
     await insertRows(conn, 'core.dim_geography', ['geography_key','region','market','country'], geographies.map((g,i)=>[i+1,...g.slice(0,3)]));
     await insertRows(conn, 'core.dim_segment', ['segment_key','segment_name','description'], segments.map((s,i)=>[i+1,s[0],s[1]]));
 
@@ -115,7 +139,7 @@ function allocationRows(totalExpectedCents, totalGapCents, customerIndex, weekIn
       customers.forEach((customer, customerIndex) => allocationRows(expectedTotal,gapTotal,customerIndex,weekIndex).forEach(row => {
         const actual=Math.max(0,row.expected+row.gap), price=650+row.brandIndex*35, units=Math.round(actual/price), expectedUnits=Math.round(row.expected/price);
         const promoRate=.045+((weekIndex+row.brandIndex+customerIndex)%5)*.006;
-        facts.push([202400+week[0],customerIndex+1,row.brandIndex+1,row.geographyIndex+1,row.segmentIndex+1,actual/100,row.expected/100,units,expectedUnits,Math.round(actual*promoRate)/100,91+((weekIndex+row.brandIndex)%8),94+((customerIndex+weekIndex)%6)]);
+        facts.push([202400+week[0],customerIndex+1,row.productIndex+1,row.geographyIndex+1,row.segmentIndex+1,actual/100,row.expected/100,units,expectedUnits,Math.round(actual*promoRate)/100,91+((weekIndex+row.brandIndex)%8),94+((customerIndex+weekIndex)%6)]);
       }));
     });
     await insertRows(conn,'core.fact_weekly_sales',['week_key','customer_key','product_key','geography_key','segment_key','actual_sales_usd','expected_sales_usd','units_sold','expected_units','promo_spend_usd','distribution_pct','in_stock_pct'],facts,250);

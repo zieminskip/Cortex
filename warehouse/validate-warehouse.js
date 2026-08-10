@@ -20,7 +20,7 @@ const query = async (conn, sql) => (await conn.runAndReadAll(sql)).getRowObjects
         (SELECT COUNT(*) FROM core.fact_weekly_sales) AS facts
     `))[0];
     const counts = Object.fromEntries(Object.entries(rawCounts).map(([key,value]) => [key,Number(value)]));
-    assert.deepEqual(counts, { weeks:16, customers:15, brands:11, products:11, geographies:4, segments:3, facts:25152 });
+    assert.deepEqual(counts, { weeks:16, customers:15, brands:15, products:27, geographies:4, segments:3, facts:68160 });
 
     const kpi = (await query(conn, 'SELECT * FROM mart.v_overview_kpis'))[0];
     assert.deepEqual(kpi, {
@@ -40,7 +40,7 @@ const query = async (conn, sql) => (await conn.runAndReadAll(sql)).getRowObjects
     for (const row of customers) assert.deepEqual([row.cumulative_impact_m,row.current_gap_m], expectedCustomers[row.customer_name]);
 
     const brands = await query(conn, 'SELECT brand_name, cumulative_impact_m, current_gap_m FROM mart.v_walmart_brand_decomposition ORDER BY brand_name');
-    const expectedBrands = { Equate:[-1.9,-0.1], Gain:[-8.4,-0.9], 'Great Value':[-3.1,-0.4], 'Other Brands':[-1.2,0.2], Tide:[-12.6,-1.3] };
+    const expectedBrands = { Equate:[-1.9,-0.1], Gain:[-8.4,-0.9], 'Great Value':[-3.1,-0.4], 'Other Brands':[-1.2,-0.1], Tide:[-12.6,-1.3] };
     for (const row of brands) assert.deepEqual([row.cumulative_impact_m,row.current_gap_m], expectedBrands[row.brand_name]);
 
     const rawQuality = (await query(conn, `

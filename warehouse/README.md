@@ -12,7 +12,7 @@ A deterministic DuckDB warehouse containing realistic retail performance data fo
 - geography
 - shopper segment
 
-The generated warehouse covers W14–W29 of FY2024 and contains 25,152 fact rows.
+The generated warehouse covers W14–W29 of FY2024 and contains 68,160 fact rows across 15 brands and 27 products/product lines.
 
 ## Schemas
 
@@ -40,9 +40,12 @@ The generated warehouse covers W14–W29 of FY2024 and contains 25,152 fact rows
 | `v_walmart_brand_decomposition` | Walmart brand cards |
 | `v_dimension_concentration` | Customer/brand/category/geography concentration selector |
 
+The dashboard's attribution tables, heatmaps, and small multiples are exported from the same facts to `assets/dashboard-data.js`. Each card contains its own eight-week Actual, Expected, and gap arrays; cumulative impact is the sum of those weekly gaps and current gap is W29.
+
 ## Commands
 
 - `npm run warehouse:build` — recreate the database deterministically.
+- `npm run warehouse:export` — regenerate `assets/dashboard-data.js` from the existing database.
 - `npm run warehouse:validate` — validate dimensions, facts, KPIs, dashboard values, and quality constraints.
 
 Database file: `warehouse/cortex.duckdb`
