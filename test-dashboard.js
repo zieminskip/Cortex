@@ -44,6 +44,9 @@ const assert = require('node:assert/strict');
   }));
   assert.deepEqual(axes.sales, { min:45, max:70 });
   assert.deepEqual(axes.gap, { min:-40, max:10 });
+  assert.equal(await page.locator('#salesChart path[fill]:not([fill="none"])').count(),0,'Main chart must not contain a filled area');
+  assert.equal(await page.locator('#salesChart .week-selection').count(),0,'Selected weeks must not use shaded bands');
+  assert.equal(await page.locator('.mainchart .legend .gap').count(),0,'Removed area shading must not remain in the legend');
   assert.equal(await page.locator('#salesChart text').filter({hasText:'Downward breakpoint'}).count(),1);
   assert.equal(await page.locator('#salesChart .breakpoint-arrow').textContent(),'↓');
 
