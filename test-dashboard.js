@@ -87,6 +87,13 @@ const assert = require('node:assert/strict');
   assert.equal(await page.locator('#salesChart .lasso-preview').count(),1);
   assert.equal(await page.locator('#salesChart .lasso-label').textContent(),'W16–W18');
   assert.equal(await page.locator('#salesChart .lasso-handle').count(),2);
+  const lassoAlignment=await page.locator('#salesChart .lasso-preview').evaluate(group=>({
+    startWeek:group.children[0].getAttribute('data-start-week'),
+    endWeek:group.children[0].getAttribute('data-end-week'),
+    left:Number(group.children[1].getAttribute('cx')),
+    right:Number(group.children[2].getAttribute('cx')),
+  }));
+  assert.deepEqual(lassoAlignment,{startWeek:'16',endWeek:'18',left:34+2*((553-34)/15),right:34+4*((553-34)/15)});
   assert.equal(await page.locator('#salesChart .lasso-outline').evaluate(el=>getComputedStyle(el).fill),'none');
   await page.mouse.up();
   assert.equal(await page.locator('#selectionSummary').innerText(),'W16–W18 · 3 weeks');
