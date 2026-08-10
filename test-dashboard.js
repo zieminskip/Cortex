@@ -61,6 +61,7 @@ const assert = require('node:assert/strict');
   assert.equal(await page.locator('#salesChart .breakpoint-arrow').textContent(),'↓');
 
   await page.locator('#salesChart .chart-hit[data-week="15"]').click();
+  assert.equal(await page.locator('#salesChart [data-selected-week="15"]').count(),1,'One click must add exactly the clicked week');
   await page.locator('#salesChart .chart-hit[data-week="23"]').click();
   assert.ok((await page.locator('#selectionSummary').innerText()).includes('W15'));
   assert.equal(await page.locator('#salesChart [data-selected-week="15"]').count(),1);
@@ -91,6 +92,7 @@ const assert = require('node:assert/strict');
   assert.equal(await page.locator('#selectionSummary').innerText(),'W16–W18 · 3 weeks');
   assert.equal(await page.evaluate(()=>window.getSelection().toString()),'','Range dragging must not select chart labels');
   assert.equal(await chart.evaluate(el=>getComputedStyle(el).userSelect),'none');
+  assert.equal(await tooltip.isVisible(),false,'Releasing a range must not show an unrelated intermediate-week tooltip');
   assert.equal(await page.locator('#salesChart [data-selected-week]').count(),3);
   assert.equal(await page.locator('#gapChart rect[data-week]').count(),3);
   assert.equal(await page.locator('#heatgrid .cell').count(),18);
