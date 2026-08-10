@@ -106,6 +106,17 @@ const assert = require('node:assert/strict');
   assert.equal(await page.locator('.metric').first().locator('.big').innerText(),'–$2.0M');
   assert.ok(await page.locator('.card').evaluateAll(cards=>cards.every(card=>card.dataset.weeks==='16,17,18'&&card.dataset.gaps.split(',').length===3)));
 
+  await page.mouse.move(plotX(4),selectionBox.y+45);
+  await page.mouse.down();
+  await page.mouse.move(plotX(5),selectionBox.y+55,{steps:5});
+  assert.equal(await page.locator('#salesChart .lasso-label').textContent(),'W18–W19');
+  await page.mouse.move(plotX(4),selectionBox.y+55,{steps:5});
+  assert.equal(await page.locator('#salesChart .lasso-label').textContent(),'W18');
+  assert.ok(await page.locator('#salesChart .lasso-preview').evaluate(el=>el.classList.contains('single-week')));
+  await page.mouse.up();
+  assert.equal(await page.locator('#selectionSummary').innerText(),'W18 selected','Reversing an active lasso to its origin must select one week');
+  assert.equal(await page.locator('#salesChart [data-selected-week]').count(),1);
+
   await page.evaluate(()=>setSelectedWeeks([14,15],'Positive-period test'));
   assert.equal(await page.locator('#selectionSummary').innerText(),'W14–W15 · 2 weeks');
   assert.equal(await page.locator('.metric').first().locator('.big').innerText(),'+$3.0M');
