@@ -71,9 +71,22 @@ const assert = require('node:assert/strict');
   assert.equal(await page.locator('#heatgrid .cell[data-week="23"]').count(),0);
 
   const selectionBox=await chart.boundingBox(),plotX=index=>selectionBox.x+(34+index*((553-34)/15))/660*selectionBox.width;
+  const beforeMicroDrag=await page.locator('#selectionSummary').innerText();
+  await page.mouse.move(plotX(2),selectionBox.y+50);
+  await page.mouse.down();
+  await page.mouse.move(plotX(2)+8,selectionBox.y+52,{steps:3});
+  await page.mouse.up();
+  assert.equal(await page.locator('#selectionSummary').innerText(),beforeMicroDrag,'A small pointer movement must not trigger a range or toggle');
+  assert.equal(await page.locator('#salesChart .lasso-preview').count(),0);
+
   await page.mouse.move(plotX(2)-2,selectionBox.y+45);
   await page.mouse.down();
   await page.mouse.move(plotX(4)+2,selectionBox.y+70,{steps:8});
+  await page.locator('#salesChart .lasso-preview').waitFor({state:'attached'});
+  assert.equal(await page.locator('#salesChart .lasso-preview').count(),1);
+  assert.equal(await page.locator('#salesChart .lasso-label').textContent(),'W16–W18');
+  assert.equal(await page.locator('#salesChart .lasso-handle').count(),2);
+  assert.equal(await page.locator('#salesChart .lasso-outline').evaluate(el=>getComputedStyle(el).fill),'none');
   await page.mouse.up();
   assert.equal(await page.locator('#selectionSummary').innerText(),'W16–W18 · 3 weeks');
   assert.equal(await page.locator('#salesChart [data-selected-week]').count(),3);
