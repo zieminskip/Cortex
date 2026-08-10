@@ -11,8 +11,8 @@ const assert = require('node:assert/strict');
   assert.equal(response.status(), 200);
   assert.equal(await page.title(), 'Total Business Dashboard');
   assert.equal(errors.length, 0, errors.join('\n'));
-  assert.equal(await page.locator('.metric').nth(3).locator('.big').innerText(), '32%');
-  assert.equal(await page.locator('.callout strong').innerText(), '–26%');
+  assert.equal(await page.locator('.metric').nth(3).locator('.big').innerText(), '33%');
+  assert.equal(await page.locator('.callout strong').innerText(), '–6.6%');
   assert.match(await page.locator('.customer tbody tr').nth(1).innerText(), /9%/);
 
   const geometry = await page.evaluate(() => {
@@ -43,7 +43,40 @@ const assert = require('node:assert/strict');
     gap: { min:Number(document.querySelector('#gapChart').dataset.yMin), max:Number(document.querySelector('#gapChart').dataset.yMax) },
   }));
   assert.deepEqual(axes.sales, { min:45, max:70 });
-  assert.deepEqual(axes.gap, { min:-40, max:0 });
+  assert.deepEqual(axes.gap, { min:-40, max:10 });
+  assert.equal(await page.locator('#salesChart text').filter({hasText:'Downward breakpoint'}).count(),1);
+  assert.equal(await page.locator('#salesChart .breakpoint-arrow').textContent(),'↓');
+
+  await page.locator('#salesChart .chart-hit[data-week="15"]').click();
+  await page.locator('#salesChart .chart-hit[data-week="23"]').click();
+  assert.ok((await page.locator('#selectionSummary').innerText()).includes('W15'));
+  assert.equal(await page.locator('#salesChart [data-selected-week="15"]').count(),1);
+  assert.equal(await page.locator('#salesChart [data-selected-week="23"]').count(),0);
+  assert.equal(await page.locator('#gapChart rect[data-week="W15"]').count(),1);
+  assert.equal(await page.locator('#gapChart rect[data-week="W23"]').count(),0);
+  assert.ok(await page.locator('#heatgrid .cell[data-week="15"]').count()>0);
+  assert.equal(await page.locator('#heatgrid .cell[data-week="23"]').count(),0);
+
+  const selectionBox=await chart.boundingBox(),plotX=index=>selectionBox.x+(34+index*((553-34)/15))/660*selectionBox.width;
+  await page.mouse.move(plotX(2)-2,selectionBox.y+45);
+  await page.mouse.down();
+  await page.mouse.move(plotX(4)+2,selectionBox.y+70,{steps:8});
+  await page.mouse.up();
+  assert.equal(await page.locator('#selectionSummary').innerText(),'W16–W18 · 3 weeks');
+  assert.equal(await page.locator('#salesChart [data-selected-week]').count(),3);
+  assert.equal(await page.locator('#gapChart rect[data-week]').count(),3);
+  assert.equal(await page.locator('#heatgrid .cell').count(),18);
+  assert.equal(await page.locator('.metric').first().locator('.big').innerText(),'–$2.0M');
+  assert.ok(await page.locator('.card').evaluateAll(cards=>cards.every(card=>card.dataset.weeks==='16,17,18'&&card.dataset.gaps.split(',').length===3)));
+
+  await page.evaluate(()=>setSelectedWeeks([14,15],'Positive-period test'));
+  assert.equal(await page.locator('#selectionSummary').innerText(),'W14–W15 · 2 weeks');
+  assert.equal(await page.locator('.metric').first().locator('.big').innerText(),'+$3.0M');
+  assert.ok(await page.locator('.metric').first().locator('.big').evaluate(el=>el.classList.contains('green')&&!el.classList.contains('red')));
+  assert.ok(await page.locator('.callout strong').evaluate(el=>el.classList.contains('green')&&!el.classList.contains('red')));
+
+  await page.locator('.since').click();
+  assert.equal(await page.locator('#selectionSummary').innerText(),'W22–W29 · 8 weeks');
 
   await page.locator('#gapChart rect[data-week="W29"]').click();
   assert.ok(await page.locator('#gapChart rect[data-week="W29"]').evaluate(el => el.classList.contains('selected')));

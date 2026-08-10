@@ -4,7 +4,7 @@ const { DuckDBInstance } = require('@duckdb/node-api');
 
 const DB_PATH = path.join(__dirname, 'cortex.duckdb');
 const OUTPUT_PATH = path.join(__dirname, '..', 'assets', 'dashboard-data.js');
-const WEEKS = Array.from({ length: 8 }, (_, index) => 22 + index);
+const WEEKS = Array.from({ length: 16 }, (_, index) => 14 + index);
 const DIMENSIONS = {
   Customer: { expression: 'c.customer_name', context: 'All business' },
   Brand: { expression: 'b.brand_name', context: 'Home Care category', filter: "p.category = 'Home Care'" },
@@ -55,7 +55,7 @@ async function groupedSeries(connection, memberExpression, where = 'TRUE') {
       ROUND(SUM(f.actual_sales_usd) / 1000000, 4) AS actual_m,
       ROUND(SUM(f.expected_sales_usd) / 1000000, 4) AS expected_m
     ${joins}
-    WHERE w.fiscal_week BETWEEN 22 AND 29 AND (${where})
+    WHERE w.fiscal_week BETWEEN 14 AND 29 AND (${where})
     GROUP BY member, w.fiscal_week
     ORDER BY member, w.fiscal_week`);
   const grouped = new Map();
@@ -66,7 +66,7 @@ async function groupedSeries(connection, memberExpression, where = 'TRUE') {
   }
   return [...grouped.values()].map(item => {
     const gaps = item.actual.map((value, index) => round(value - item.expected[index]));
-    const impact = round(gaps.reduce((sum, value) => sum + value, 0));
+    const impact = round(gaps.slice(8).reduce((sum, value) => sum + value, 0));
     return { ...item, gaps, impact, current:gaps.at(-1) };
   });
 }
@@ -79,7 +79,7 @@ async function groupedSeries(connection, memberExpression, where = 'TRUE') {
     for (const [dimension, config] of Object.entries(DIMENSIONS)) {
       const all = await groupedSeries(connection, config.expression, config.filter || 'TRUE');
       const negativeTotal = all.filter(item => item.impact < 0).reduce((sum, item) => sum + Math.abs(item.impact), 0);
-      const rows = [...all].sort((a, b) => Math.abs(b.impact) - Math.abs(a.impact)).slice(0, 6)
+      const rows = [...all].sort((a, b) => Math.abs(b.impact) - Math.abs(a.impact))
         .map(item => ({ name:item.name, weekly:item.gaps, impact:item.impact, current:item.current, share:item.impact < 0 ? Math.round(Math.abs(item.impact) / negativeTotal * 100) : null, status:statusFor(item.gaps) }));
       output.attribution[dimension] = { context:config.context, total:all.length, negativeTotal:round(negativeTotal), rows };
 
@@ -88,7 +88,7 @@ async function groupedSeries(connection, memberExpression, where = 'TRUE') {
           if (split === dimension) continue;
           const effectiveSplit = dimension === 'Brand' && split === 'Category' ? 'p.subcategory' : splitExpression;
           const where = [config.filter, `${config.expression} = ${esc(parent.name)}`].filter(Boolean).join(' AND ');
-          const children = collapse(await groupedSeries(connection, effectiveSplit, where), `Other ${split}`, 5).map(item => {
+          const children = (await groupedSeries(connection, effectiveSplit, where)).map(item => {
             const peak = Math.max(...item.gaps.map(value => Math.abs(value)), 0);
             const recovery = peak ? Math.max(0, Math.min(100, Math.round((1 - Math.abs(item.current) / peak) * 100))) : 100;
             return { ...item, recovery };
