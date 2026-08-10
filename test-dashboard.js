@@ -14,6 +14,13 @@ const assert = require('node:assert/strict');
   assert.equal(await page.locator('.metric').nth(3).locator('.big').innerText(), '33%');
   assert.equal(await page.locator('.callout strong').innerText(), '–6.6%');
   assert.match(await page.locator('.customer tbody tr').nth(1).innerText(), /9%/);
+  const earlyWarnings=page.locator('.navitem',{hasText:'Early Warnings',exact:true});
+  assert.equal(await earlyWarnings.count(),1);
+  await earlyWarnings.click();
+  assert.ok(await earlyWarnings.evaluate(el=>el.classList.contains('active')));
+  assert.equal(await page.locator('h1').innerText(),'Total Business');
+  assert.equal(await page.locator('.metric').count(),5);
+  await page.locator('.navitem',{hasText:'Overview',exact:true}).click();
 
   const geometry = await page.evaluate(() => {
     const rect = selector => { const r = document.querySelector(selector).getBoundingClientRect(); return { top:r.top, bottom:r.bottom, height:r.height }; };
@@ -44,9 +51,12 @@ const assert = require('node:assert/strict');
   }));
   assert.deepEqual(axes.sales, { min:45, max:70 });
   assert.deepEqual(axes.gap, { min:-40, max:10 });
-  assert.equal(await page.locator('#salesChart path[fill]:not([fill="none"])').count(),0,'Main chart must not contain a filled area');
+  assert.ok(await page.locator('#salesChart .gap-area.positive[data-gap-sign="positive"]').count()>0,'Positive gaps must be shaded green between the curves');
+  assert.ok(await page.locator('#salesChart .gap-area.negative[data-gap-sign="negative"]').count()>0,'Negative gaps must be shaded red between the curves');
+  assert.ok(await page.locator('#salesChart path[fill]:not([fill="none"])').evaluateAll(paths=>paths.every(path=>path.classList.contains('gap-area'))),'Only between-curve gap paths may use area fills');
   assert.equal(await page.locator('#salesChart .week-selection').count(),0,'Selected weeks must not use shaded bands');
-  assert.equal(await page.locator('.mainchart .legend .gap').count(),0,'Removed area shading must not remain in the legend');
+  assert.equal(await page.locator('.mainchart .legend .gap-positive').count(),1);
+  assert.equal(await page.locator('.mainchart .legend .gap-negative').count(),1);
   assert.equal(await page.locator('#salesChart text').filter({hasText:'Downward breakpoint'}).count(),1);
   assert.equal(await page.locator('#salesChart .breakpoint-arrow').textContent(),'↓');
 
